@@ -48,12 +48,20 @@ namespace cinatra {
 		}
 
 		std::string local_address() {
+			if (has_closed_) {
+				return "";
+			}
+
 			std::stringstream ss;
 			ss << socket_.local_endpoint();
 			return ss.str();
 		}
 
 		std::string remote_address() {
+			if (has_closed_) {
+				return "";
+			}
+
 			std::stringstream ss;
 			ss << socket_.remote_endpoint();
 			return ss.str();
@@ -388,6 +396,7 @@ namespace cinatra {
 			boost::system::error_code ec;
 			socket().close(ec);
 			has_shake_ = false;
+			has_closed_ = true;
 		}
 
 		void set_response_attr() {
@@ -661,7 +670,7 @@ namespace cinatra {
 				}
 
 				if (req_.body_finished()) {
-					//call_back();
+					call_back();
 					do_write();
 					return;
 				}
@@ -693,6 +702,7 @@ namespace cinatra {
 				}
 				else {
 					//response_back(status_type::ok, "multipart finished");
+					call_back();
 					do_write();
 				}
 			});
@@ -1076,6 +1086,7 @@ namespace cinatra {
 		const long KEEP_ALIVE_TIMEOUT_;
 		const std::string& static_dir_;
 		bool has_shake_ = false;
+		bool has_closed_ = false;
 
 		//for writing message
 		std::mutex buffers_mtx_;

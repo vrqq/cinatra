@@ -168,8 +168,8 @@ namespace cinatra {
 		template<http_method... Is, typename Function, typename... AP>
 		void set_http_handler(std::string_view name, Function&& f, AP&&... ap) {
 			if constexpr(has_type<enable_cache<bool>, std::tuple<std::decay_t<AP>...>>::value) {//for cache
-				bool b = true;
-				((b&&(b = need_cache(std::forward<AP>(ap))), false),...);
+				bool b = false;
+				((!b&&(b = need_cache(std::forward<AP>(ap)))),...);
 				if (!b) {
 					http_cache::get().add_skip(name);
 				}else{
@@ -217,7 +217,10 @@ namespace cinatra {
         {
         	if(!name.empty()){
 				public_root_path_ = "./"+name+"/";
-        	}
+			}
+			else {
+				public_root_path_ = "./";
+			}
         }
 
         std::string get_public_root_directory()
@@ -248,7 +251,7 @@ namespace cinatra {
 
 		void set_static_res_handler()
 		{
-			set_http_handler<POST,GET>(STAIC_RES, [this](request& req, response& res){
+			set_http_handler<POST,GET>(STATIC_RESOURCE, [this](request& req, response& res){
 				auto state = req.get_state();
 				switch (state) {
 					case cinatra::data_proc_state::data_begin:
