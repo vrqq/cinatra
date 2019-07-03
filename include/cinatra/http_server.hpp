@@ -306,7 +306,7 @@ namespace cinatra {
 		}
 
 		void send_small_file(response& res, std::ifstream* in, std::string_view mime) {
-			res.add_header("Access-Control-Allow-origin", "*");
+			// res.add_header("Access-Control-Allow-origin", "*");
 			res.add_header("Content-type", std::string(mime.data(), mime.size()) + "; charset=utf8");
 			std::stringstream file_buffer;
 			file_buffer << in->rdbuf();

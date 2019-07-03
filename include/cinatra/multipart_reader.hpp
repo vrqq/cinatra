@@ -103,6 +103,7 @@ private:
 		if (self->on_part_begin != nullptr) {
 			self->on_part_begin(self->currentHeaders);
 		}
+		std::cout<<"* multipart_reader.hpp] line 106: currentHeaders.size()="<<self->currentHeaders.size()<<std::endl;
 		self->currentHeaders.clear();
 	}
 

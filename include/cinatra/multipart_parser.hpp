@@ -66,7 +66,10 @@ namespace cinatra {
 		}
 
 		size_t feed(const char *buffer, size_t len) {
+			std::cout<<"*Feed(): buffer="<<static_cast<const void*>(buffer)<<" size="<<len<<std::endl; std::cout.flush();
+			// std::cout<<std::string(buffer, len)<<std::endl<<"*--- END BUFFER"<<std::endl;  std::cout.flush();
 			if (state == PARSE_ERROR || len == 0) {
+				std::cout<<"*Feed(): Parse_error."<<std::endl; std::cout.flush();
 				return 0;
 			}
 

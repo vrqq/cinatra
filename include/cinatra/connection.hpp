@@ -567,6 +567,7 @@ namespace cinatra {
 						res_.set_status_and_content(status_type::bad_request, "mutipart error");
 						return;
 					}						
+					std::cout<<"* connection.hpp] line 570: is_multi_part_file_="<<is_multi_part_file_<<std::endl;
 					if(is_multi_part_file_)
 					{
 						auto ext = get_extension(filename);
