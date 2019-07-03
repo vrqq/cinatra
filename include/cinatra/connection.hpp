@@ -559,6 +559,7 @@ namespace cinatra {
 		//-------------multipart----------------------//
 		void init_multipart_parser() {
 				multipart_parser_.on_part_begin = [this](const multipart_headers & headers) {
+					std::cout<<"* connection.hpp] Calling on_part_begin()"<<std::endl;
 					req_.set_multipart_headers(headers);
 					auto filename = req_.get_multipart_field_name("filename");
 					is_multi_part_file_ = req_.is_multipart_file();

@@ -83,17 +83,18 @@ private:
 
 	static void cbHeaderField(const char *buffer, size_t start, size_t end, void *userData) {
 		multipart_reader *self = (multipart_reader *)userData;
-		self->currentHeaderName = { buffer + start, end - start };
+		self->currentHeaderName += { buffer + start, end - start };
 	}
 
 	static void cbHeaderValue(const char *buffer, size_t start, size_t end, void *userData) {
 		multipart_reader *self = (multipart_reader *)userData;
-		self->currentHeaderValue = { buffer + start, end - start };
+		self->currentHeaderValue += { buffer + start, end - start };
 	}
 
 	static void cbHeaderEnd(const char *buffer, size_t start, size_t end, void *userData) {
 		multipart_reader *self = (multipart_reader *)userData;
 		self->currentHeaders.emplace(self->currentHeaderName, self->currentHeaderValue);
+		self->currentHeaderName.clear(); self->currentHeaderValue.clear();
 		//self->currentHeaders.emplace(std::string{ self->currentHeaderName.data(), self->currentHeaderName.length() },
 		//	std::string{ self->currentHeaderValue.data(), self->currentHeaderValue.length() });
 	}
