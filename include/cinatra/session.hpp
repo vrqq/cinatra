@@ -1,111 +1,106 @@
-//
-// Created by xmh on 18-5-7.
-//
 #pragma once
-#include <iostream>
-#include <string>
-#include <any>
-#include <map>
-#include <chrono>
+
 #include <ctime>
 #include <mutex>
-#include <cstring>
-#include "uuid.h"
-#include <memory>
+#include <string>
+#include <unordered_map>
+
 #include "cookie.hpp"
+
 namespace cinatra {
 
-	class session
-	{
-	public:
-		session(const std::string& name, const std::string& uuid_str, std::size_t expire, 
-			const std::string& path = "/", const std::string& domain = "")
-		{
-			id_ = uuid_str;
-			expire_ = expire == -1 ? 86400 : expire;
-			std::time_t now = std::time(nullptr);
-			time_stamp_ = expire_ + now;
-			cookie_.set_name(name);
-			cookie_.set_path(path);
-			cookie_.set_domain(domain);
-			cookie_.set_value(uuid_str);
-			cookie_.set_version(0);
-			cookie_.set_max_age(expire == -1 ? -1 : time_stamp_);
-		}
+class session {
+ public:
+  session(const std::string &session_id, std::size_t session_timeout,
+          bool need_set_to_client)
+      : session_id_(session_id),
+        session_timeout_(session_timeout),
+        cookie_(CSESSIONID, session_id_),
+        need_set_to_client_(need_set_to_client) {
+    time_stamp_ = session_timeout_ + std::time(nullptr);
+    cookie_.set_max_age(session_timeout_);
+  }
 
-		void set_data(const std::string& name, std::any data)
-		{
-			std::unique_lock<std::mutex> lock(mtx_);
-			data_[name] = std::move(data);
-		}
+  void set_session_timeout(const std::size_t session_timeout = 86400) {
+    std::unique_lock<std::mutex> lock(mtx_);
 
-		template<typename T>
-		T get_data(const std::string& name)
-		{
-			std::unique_lock<std::mutex> lock(mtx_);
-			auto itert = data_.find(name);
-			if (itert != data_.end())
-			{
-				return std::any_cast<T>(itert->second);
-			}
-			return T{};
-		}
+    session_timeout_ = session_timeout;
+    time_stamp_ = session_timeout_ + std::time(nullptr);
+    cookie_.set_max_age(session_timeout_);
+    need_set_to_client_ = true;
+  }
 
-		bool has(const std::string& name) {
-			std::unique_lock<std::mutex> lock(mtx_);
-			return data_.find(name) != data_.end();
-		}
+  void invalidate() { set_session_timeout(0); }
 
-		const std::string get_id()
-		{
-			return id_;
-		}
+  void set_data(const std::string &name, std::any data) {
+    std::unique_lock<std::mutex> lock(mtx_);
 
-		void set_max_age(const std::time_t seconds)
-		{
-			std::unique_lock<std::mutex> lock(mtx_);
-			is_update_ = true;
-			expire_ = seconds == -1 ? 86400 : seconds;
-			std::time_t now = std::time(nullptr);
-			time_stamp_ = now + expire_;
-			cookie_.set_max_age(seconds == -1 ? -1 : time_stamp_);
-		}
+    data_[name] = std::move(data);
+  }
 
-		void remove()
-		{
-			set_max_age(0);
-		}
+  void remove_data(const std::string &name) {
+    std::unique_lock<std::mutex> lock(mtx_);
 
-		cinatra::cookie& get_cookie()
-		{
-			return cookie_;
-		}
+    if (data_.find(name) != data_.end()) {
+      data_.erase(name);
+    }
+  }
 
-		std::time_t time_stamp() {
-			return time_stamp_;
-		}
+  template <typename T>
+  std::optional<T> get_data(const std::string &name) {
+    std::unique_lock<std::mutex> lock(mtx_);
 
-		bool is_need_update()
-		{
-			std::unique_lock<std::mutex> lock(mtx_);
-			return is_update_;
-		}
+    auto iter = data_.find(name);
+    if (iter != data_.end()) {
+      try {
+        return std::any_cast<T>(iter->second);
+      } catch (const std::exception &e) {
+        return std::nullopt;
+      }
+    }
 
-		void set_need_update(bool flag)
-		{
-			std::unique_lock<std::mutex> lock(mtx_);
-			is_update_ = flag;
-		}
+    return std::nullopt;
+  }
 
-	private:
-		session() = delete;
+  const auto &get_all_data() const { return data_; }
 
-		std::string id_;
-		std::size_t expire_;
-		std::time_t time_stamp_;
-		std::map<std::string, std::any> data_;
-		std::mutex mtx_;
-		cookie cookie_;
-		bool is_update_ = true;
-	};
-}
+  const std::string &get_session_id() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    return session_id_;
+  }
+
+  std::size_t get_time_stamp() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    return time_stamp_;
+  }
+
+  cookie &get_session_cookie() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    return cookie_;
+  }
+
+  bool get_need_set_to_client() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    return need_set_to_client_;
+  }
+
+  void set_need_set_to_client(bool need_set_to_client) {
+    std::unique_lock<std::mutex> lock(mtx_);
+    need_set_to_client_ = need_set_to_client;
+  }
+
+ private:
+  session() = delete;
+
+  std::string session_id_;
+  // after session_timeout_ seconds, the session expires
+  std::size_t session_timeout_;
+  // the session expires at time_stamp_
+  std::time_t time_stamp_;
+  std::mutex mtx_;
+  std::unordered_map<std::string, std::any> data_;
+  cookie cookie_;
+  bool need_set_to_client_;
+};
+
+}  // namespace cinatra

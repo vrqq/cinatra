@@ -1,115 +1,116 @@
 #pragma once
-#include "use_asio.hpp"
-#include <vector>
 #include <memory>
 #include <thread>
+#include <vector>
+
+#include "use_asio.hpp"
 #include "utils.hpp"
 
-namespace cinatra
-{
-	class io_service_pool : private noncopyable{
-	public:
-		explicit io_service_pool(std::size_t pool_size) : next_io_service_(0) {
-			if (pool_size == 0)
-				pool_size = 1; //set default value as 1
+namespace cinatra {
+class io_service_pool {
+ public:
+  using executor_type = asio::io_context::executor_type;
+  explicit io_service_pool(std::size_t pool_size) : next_io_context_(0) {
+    if (pool_size == 0) {
+      pool_size = 1;  // set default value as 1
+    }
 
-			for (std::size_t i = 0; i < pool_size; ++i)
-			{
-				io_service_ptr io_service(new boost::asio::io_service);
-				work_ptr work(new boost::asio::io_service::work(*io_service));
-				io_services_.push_back(io_service);
-				work_.push_back(work);
-			}
-		}
+    for (std::size_t i = 0; i < pool_size; ++i) {
+      io_context_ptr io_context(new asio::io_context);
+      auto work = asio::make_work_guard(*io_context);
+      io_contexts_.push_back(io_context);
+      work_.push_back(std::move(work));
+    }
+  }
 
-		void run() {
-			std::vector<std::shared_ptr<std::thread> > threads;
-			for (std::size_t i = 0; i < io_services_.size(); ++i){
-				threads.emplace_back(std::make_shared<std::thread>(
-					[](io_service_ptr svr) {
-						svr->run();
-					}, io_services_[i]));
-			}
+  void run() {
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (std::size_t i = 0; i < io_contexts_.size(); ++i) {
+      threads.emplace_back(std::make_shared<std::thread>(
+          [](io_context_ptr svr) {
+            svr->run();
+          },
+          io_contexts_[i]));
+    }
 
-			for (std::size_t i = 0; i < threads.size(); ++i)
-				threads[i]->join();
-		}
+    for (std::size_t i = 0; i < threads.size(); ++i) {
+      threads[i]->join();
+    }
+    promise_.set_value();
+  }
 
-		intptr_t run_one() {
-			return -1;
-		}
+  void stop() {
+    work_.clear();
+    promise_.get_future().wait();
+  }
 
-		intptr_t poll() {
-			return -1;
-		}
+  bool has_stop() const { return work_.empty(); }
 
-		intptr_t poll_one() {
-			return -1;
-		}
+  size_t current_io_context() { return next_io_context_ - 1; }
 
-		void stop() {
-			work_.clear();
+  asio::io_context::executor_type get_executor() {
+    asio::io_context &io_context = *io_contexts_[next_io_context_];
+    ++next_io_context_;
+    if (next_io_context_ == io_contexts_.size()) {
+      next_io_context_ = 0;
+    }
+    return io_context.get_executor();
+  }
 
-			for (std::size_t i = 0; i < io_services_.size(); ++i)
-				io_services_[i]->stop();
-		}
+  asio::io_context &get_io_context() {
+    asio::io_context &io_context = *io_contexts_[next_io_context_];
+    ++next_io_context_;
+    if (next_io_context_ == io_contexts_.size())
+      next_io_context_ = 0;
+    return io_context;
+  }
 
-		boost::asio::io_service& get_io_service() {
-			boost::asio::io_service& io_service = *io_services_[next_io_service_];
-			++next_io_service_;
-			if (next_io_service_ == io_services_.size())
-				next_io_service_ = 0;
-			return io_service;
-		}
+  asio::io_context &get_io_service() { return get_io_context(); }
 
-	private:
-		using io_service_ptr = std::shared_ptr<boost::asio::io_service>;
-		using work_ptr = std::shared_ptr<boost::asio::io_service::work>;
+ private:
+  using io_context_ptr = std::shared_ptr<asio::io_context>;
+  using work_type =
+      asio::executor_work_guard<asio::io_context::executor_type>;
 
-		std::vector<io_service_ptr> io_services_;
-		std::vector<work_ptr> work_;
-		std::size_t next_io_service_;
-	};
+  std::vector<io_context_ptr> io_contexts_;
+  std::vector<work_type> work_;
+  std::size_t next_io_context_;
+  std::promise<void> promise_;
+};
 
-	class io_service_inplace : private noncopyable{
-	public:
-		explicit io_service_inplace() {
-			io_services_ = std::make_shared<boost::asio::io_service>();
-			work_ = std::make_shared<boost::asio::io_service::work>(*io_services_);
-		}
+class io_service_inplace : private noncopyable {
+ public:
+  explicit io_service_inplace() {
+    io_services_ = std::make_shared<asio::io_context>();
+    work_ = std::make_unique<work_type>(asio::make_work_guard(*io_services_));
+  }
 
-		void run() {
-			io_services_->run();
-		}
+  void run() { io_services_->run(); }
 
-		intptr_t run_one() {
-			return io_services_->run_one();
-		}
+  intptr_t run_one() { return io_services_->run_one(); }
 
-		intptr_t poll() {
-			return io_services_->poll();
-		}
+  intptr_t poll() { return io_services_->poll(); }
 
-		intptr_t poll_one() {
-			return io_services_->poll_one();
-		}
+  intptr_t poll_one() { return io_services_->poll_one(); }
 
-		void stop() {
-			work_ = nullptr;
+  void stop() {
+    work_.reset();
 
-			if (io_services_)
-				io_services_->stop();
-		}
+    if (io_services_)
+      io_services_->stop();
+  }
 
-		boost::asio::io_service& get_io_service() {
-			return *io_services_;
-		}
+  asio::io_context &get_io_context() { return *io_services_; }
 
-	private:
-		using io_service_ptr = std::shared_ptr<boost::asio::io_service>;
-		using work_ptr = std::shared_ptr<boost::asio::io_service::work>;
+  asio::io_context &get_io_service() { return get_io_context(); }
 
-		io_service_ptr io_services_;
-		work_ptr work_;
-	};
-}
+ private:
+  using io_context_ptr = std::shared_ptr<asio::io_context>;
+  using work_type =
+      asio::executor_work_guard<asio::io_context::executor_type>;
+  using work_ptr = std::unique_ptr<work_type>;
+
+  io_context_ptr io_services_;
+  work_ptr work_;
+};
+}  // namespace cinatra
